@@ -1,5 +1,6 @@
-from typing import TypedDict
-from langchain_openai import ChatOpenAI
+import os
+from typing import TypedDict, Union
+from langchain_openai import AzureChatOpenAI, ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 from langgraph.graph import StateGraph, START, END
 
@@ -11,9 +12,28 @@ class GraphState(TypedDict):
     answer: str
 
 
+def _make_llm(temperature: float = 0.0) -> Union[AzureChatOpenAI, ChatOpenAI]:
+    """Instantiate the appropriate LLM based on available environment variables.
+
+    - If AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT are set, uses AzureChatOpenAI.
+    - If OPENAI_API_KEY is set, falls back to native ChatOpenAI.
+    """
+    if os.getenv("AZURE_OPENAI_API_KEY") and os.getenv("AZURE_OPENAI_ENDPOINT"):
+        return AzureChatOpenAI(
+            azure_deployment=os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4.1"),
+            streaming=True,
+            temperature=temperature,
+        )
+    return ChatOpenAI(
+        model=os.getenv("OPENAI_MODEL", "gpt-4.1"),
+        streaming=True,
+        temperature=temperature,
+    )
+
+
 def planning(state: GraphState):
     """Given a question, come up with a plan to answer it."""
-    llm = ChatOpenAI(model="gpt-4o-mini", streaming=True, temperature=0.0)
+    llm = _make_llm(temperature=0.0)
     messages = [
         SystemMessage(content="You are a helpful assistant. Given a question, create a concise step-by-step plan to answer it."),
         HumanMessage(content=state["question"]),
@@ -24,7 +44,7 @@ def planning(state: GraphState):
 
 def generate_joke(state: GraphState):
     """Generates a concise joke related to the question topic."""
-    llm = ChatOpenAI(model="gpt-4o-mini", streaming=True, temperature=0.7)
+    llm = _make_llm(temperature=0.7)
     messages = [
         SystemMessage(content="You are a comedian. Generate a single short, funny joke related to the topic of the question. Keep it to 1-2 sentences."),
         HumanMessage(content=state["question"]),
@@ -35,7 +55,7 @@ def generate_joke(state: GraphState):
 
 def answer_question(state: GraphState):
     """Generates the final answer to the question using the plan."""
-    llm = ChatOpenAI(model="gpt-4o-mini", streaming=True, temperature=0.0)
+    llm = _make_llm(temperature=0.0)
     messages = [
         SystemMessage(content=f"You are a helpful assistant. Use the following plan to answer the question.\n\nPlan:\n{state['plan']}. Include the following joke in your answer to make it more engaging:\n\nJoke:\n{state['joke']}"),
         HumanMessage(content=state["question"]),
