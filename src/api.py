@@ -1,4 +1,5 @@
 import os
+import json
 from typing import AsyncIterator
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
@@ -26,8 +27,13 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 NODE_STATUS_MESSAGES = {
-    "planning": "Creating a plan...\n",
-    "generate_joke": "Generating a joke...\n",
+    "planning": "Creating a plan...",
+    "generate_joke": "Generating a joke...",
+}
+
+NODE_OUTPUT_LABELS = {
+    "planning": "📋 Plan",
+    "generate_joke": "😄 Joke",
 }
 
 class GraphEvent(StrEnum):
@@ -36,7 +42,7 @@ class GraphEvent(StrEnum):
 
 def sse_event(event_type: str, data: str) -> str:
     """Format a Server-Sent Event with a typed event field."""
-    return f"event: {event_type}\ndata: {data}\n\n"
+    return f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
 
 async def llm_chat_generator(prompt: str) -> AsyncIterator[str]:
     """Streams SSE events using LangGraph."""
@@ -48,14 +54,23 @@ async def llm_chat_generator(prompt: str) -> AsyncIterator[str]:
     ):
         node = event.get("metadata", {}).get("langgraph_node")
 
+        # Yield status updates when a new node starts
         if event["event"] == GraphEvent.ON_CHAT_MODEL_START and node in NODE_STATUS_MESSAGES:
             if node not in announced_nodes:
                 announced_nodes.add(node)
-                yield sse_event("status", NODE_STATUS_MESSAGES[node].strip())
+                yield sse_event("status", NODE_STATUS_MESSAGES[node])
 
-        elif event["event"] == GraphEvent.ON_CHAT_MODEL_STREAM and node == "answer_question":
+        elif event["event"] == GraphEvent.ON_CHAT_MODEL_STREAM:
             content = event["data"]["chunk"].content
-            if content:
+            if not content:
+                continue
+
+            # Stream intermediate node tokens so the frontend can show them in dropdowns
+            if node in NODE_OUTPUT_LABELS:
+                yield sse_event("node_output", f"{node}:{content}")
+
+            # Stream the final answer token by token
+            elif node == "answer_question":
                 yield sse_event("answer", content)
 
 
