@@ -3,13 +3,16 @@ import requests
 import json
 from chat_message import ChatMessage, NODE_OUTPUT_LABELS
 
+from components.sidebar import sidebar
+
 API_URL = "http://localhost:8000/stream"
 
-st.title("FastAPI + Streamlit LLM Streamer")
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
 st.set_page_config(page_title="LLM Streamer", page_icon="🤖", layout="wide")
+
+sidebar()
 
 def parse_sse_line(line: str) -> tuple[str | None, str | None]:
     """Parse a single SSE line, returning (event_type, data) or (None, None)."""
@@ -49,6 +52,9 @@ def stream_response(prompt, status_placeholder, node_outputs: dict, stats: dict)
 
 for message in st.session_state.messages:
     message.render()
+
+if not st.session_state.messages:
+    st.info("Ask me anything! I'll come up with a plan and answer your question.")
 
 if prompt := st.chat_input("Ask me something..."):
     user_message = ChatMessage(role="user", content=prompt)
