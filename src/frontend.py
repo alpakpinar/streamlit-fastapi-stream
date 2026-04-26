@@ -7,7 +7,7 @@ API_URL = "http://localhost:8000/stream"
 
 st.title("FastAPI + Streamlit LLM Streamer")
 if "messages" not in st.session_state:
-    st.session_state.messages: list[ChatMessage] = []
+    st.session_state.messages = []
 
 st.set_page_config(page_title="LLM Streamer", page_icon="🤖", layout="wide")
 
