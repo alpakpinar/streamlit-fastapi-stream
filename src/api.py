@@ -1,5 +1,6 @@
 import os
 import json
+import time
 from typing import AsyncIterator
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
@@ -39,14 +40,18 @@ NODE_OUTPUT_LABELS = {
 class GraphEvent(StrEnum):
     ON_CHAT_MODEL_START = "on_chat_model_start"
     ON_CHAT_MODEL_STREAM = "on_chat_model_stream"
+    ON_CHAT_MODEL_END = "on_chat_model_end"
 
-def sse_event(event_type: str, data: str) -> str:
+def sse_event(event_type: str, data) -> str:
     """Format a Server-Sent Event with a typed event field."""
     return f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
 
 async def llm_chat_generator(prompt: str) -> AsyncIterator[str]:
     """Streams SSE events using LangGraph."""
     announced_nodes: set[str] = set()
+    total_input_tokens = 0
+    total_output_tokens = 0
+    start_time = time.perf_counter()
 
     async for event in graph.astream_events(
         {"question": prompt},
@@ -72,6 +77,19 @@ async def llm_chat_generator(prompt: str) -> AsyncIterator[str]:
             # Stream the final answer token by token
             elif node == "answer_question":
                 yield sse_event("answer", content)
+
+        elif event["event"] == GraphEvent.ON_CHAT_MODEL_END:
+            usage = event["data"].get("output", {}).usage_metadata or {}
+            total_input_tokens += usage.get("input_tokens", 0)
+            total_output_tokens += usage.get("output_tokens", 0)
+
+    elapsed = round(time.perf_counter() - start_time, 2)
+    
+    yield sse_event("done", {
+        "input_tokens": total_input_tokens,
+        "output_tokens": total_output_tokens,
+        "elapsed_seconds": elapsed,
+    })
 
 
 @app.post("/stream")

@@ -13,14 +13,20 @@ class ChatMessage:
     role: str
     content: str
     node_outputs: dict[str, str] = field(default_factory=dict)
+    stats: dict = field(default_factory=dict)
 
     def render(self):
         """Renders the chat message in Streamlit, including any node outputs in expanders."""
         with st.chat_message(self.role):
+            st.markdown(self.content)
             if self.node_outputs:
                 for node, content in self.node_outputs.items():
                     label = NODE_OUTPUT_LABELS.get(node, node)
                     with st.expander(label):
                         st.markdown(content)
-            
-            st.markdown(self.content)
+            if self.stats:
+                st.caption(
+                    f"⏱ {self.stats['elapsed_seconds']}s · "
+                    f"↑ {self.stats['input_tokens']} tokens in · "
+                    f"↓ {self.stats['output_tokens']} tokens out"
+                )
