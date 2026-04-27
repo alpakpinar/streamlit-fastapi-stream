@@ -41,6 +41,7 @@ class GraphEvent(StrEnum):
     ON_CHAT_MODEL_START = "on_chat_model_start"
     ON_CHAT_MODEL_STREAM = "on_chat_model_stream"
     ON_CHAT_MODEL_END = "on_chat_model_end"
+    ON_CHAIN_END = "on_chain_end"
 
 def sse_event(event_type: str, data) -> str:
     """Format a Server-Sent Event with a typed event field."""
@@ -64,6 +65,11 @@ async def llm_chat_generator(prompt: str) -> AsyncIterator[str]:
             if node not in announced_nodes:
                 announced_nodes.add(node)
                 yield sse_event("status", NODE_STATUS_MESSAGES[node])
+
+        elif event["event"] == GraphEvent.ON_CHAIN_END and node == "orchestrate" and event["name"] == "orchestrate":
+            output = event["data"].get("output", {})
+            planning_required = output.get("planning_required", False)
+            yield sse_event("routing", {"planning_required": planning_required})
 
         elif event["event"] == GraphEvent.ON_CHAT_MODEL_STREAM:
             content = event["data"]["chunk"].content

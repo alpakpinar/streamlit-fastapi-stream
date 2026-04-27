@@ -22,7 +22,7 @@ def parse_sse_line(line: str) -> tuple[str | None, str | None]:
         return "data", json.loads(line[len("data:"):].removeprefix(" "))
     return None, None
 
-def stream_response(prompt, status_placeholder, node_outputs: dict, stats: dict):
+def stream_response(prompt, status_placeholder, node_outputs: dict, stats: dict, routing: dict):
     """Consume the SSE stream, show status in a box, collect node outputs, yield answer chunks."""
     current_event = None
 
@@ -37,6 +37,9 @@ def stream_response(prompt, status_placeholder, node_outputs: dict, stats: dict)
                 if current_event == "status":
                     status_placeholder.status(value, state="running")
                 
+                elif current_event == "routing":
+                    routing.update(value)
+
                 elif current_event == "node_output":
                     # value is formatted as "node_name:token"
                     node, _, token = value.partition(":")
@@ -64,15 +67,20 @@ if prompt := st.chat_input("Ask me something..."):
         status_placeholder = st.empty()
         node_outputs = {}
         stats = {}
+        routing = {}
         answer_placeholder = st.empty()
         response_text = ""
-        
-        for chunk in stream_response(prompt, status_placeholder, node_outputs, stats):
+         
+        for chunk in stream_response(prompt, status_placeholder, node_outputs, stats, routing):
             response_text += chunk
             answer_placeholder.markdown(response_text + "▌")
         
         answer_placeholder.markdown(response_text)
-        
+
+        if routing.get("planning_required") is not None:
+            label, color = ("🗺 Planned", "green") if routing["planning_required"] else ("⚡ Direct", "orange")
+            st.badge(label, color=color)
+       
         for node, content in node_outputs.items():
             label = NODE_OUTPUT_LABELS.get(node, node)
             with st.expander(label):
@@ -87,4 +95,10 @@ if prompt := st.chat_input("Ask me something..."):
             )
 
     st.session_state.messages.append(user_message)
-    st.session_state.messages.append(ChatMessage(role="assistant", content=response_text, node_outputs=node_outputs, stats=stats))
+    st.session_state.messages.append(ChatMessage(
+        role="assistant",
+        content=response_text,
+        node_outputs=node_outputs,
+        stats=stats,
+        planning_required=routing.get("planning_required"),
+    ))

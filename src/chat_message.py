@@ -14,11 +14,18 @@ class ChatMessage:
     content: str
     node_outputs: dict[str, str] = field(default_factory=dict)
     stats: dict = field(default_factory=dict)
+    planning_required: bool | None = None
 
     def render(self):
         """Renders the chat message in Streamlit, including any node outputs in expanders."""
         with st.chat_message(self.role):
             st.markdown(self.content)
+
+            if self.planning_required is not None:
+                label, color = ("🗺 Planned", "green") if self.planning_required else ("⚡ Direct", "orange")
+                st.badge(label, color=color)
+
+
             if self.node_outputs:
                 for node, content in self.node_outputs.items():
                     label = NODE_OUTPUT_LABELS.get(node, node)
